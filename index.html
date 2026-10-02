@@ -274,10 +274,16 @@
     study: "공부"
   };
 
+  var VALID_CATEGORIES = Object.keys(CATEGORY_LABELS);
+
   // ---------- 상태 ----------
   var todos = [];
   var currentFilter = "all";
   var editingId = null;
+
+  // 편집 중 입력한 값. 아직 저장되지 않았으므로 todos와는 별개로 들고 있다.
+  // 이게 없으면 다른 줄을 건드려 재렌더가 일어나는 순간 입력 내용이 사라진다.
+  var editingDraft = null; // { text, category }
 
   // ---------- 저장 계층 ----------
 
@@ -312,19 +318,45 @@
 
     try {
       var parsed = JSON.parse(raw);
-      todos = Array.isArray(parsed.todos) ? parsed.todos : [];
+      var items = Array.isArray(parsed.todos) ? parsed.todos : [];
+      todos = items.filter(isValidTodo).map(normalizeTodo);
+
+      if (todos.length !== items.length) {
+        console.warn("형식이 맞지 않는 항목 " + (items.length - todos.length) + "개를 건너뜁니다.");
+      }
     } catch (e) {
       console.warn("저장된 데이터를 읽을 수 없어 빈 목록으로 시작합니다.", e);
       todos = [];
     }
   }
 
+  // JSON으로는 읽히지만 형식이 깨진 항목이 섞여 있을 수 있다.
+  // 그대로 그리면 배지가 "undefined"로 나오는 식으로 화면이 망가진다.
+  function isValidTodo(item) {
+    return !!item
+      && typeof item.id === "string" && item.id !== ""
+      && typeof item.text === "string"
+      && VALID_CATEGORIES.indexOf(item.category) !== -1;
+  }
+
+  function normalizeTodo(item) {
+    return {
+      id: item.id,
+      text: item.text.slice(0, 200),
+      category: item.category,
+      done: item.done === true,
+      createdAt: typeof item.createdAt === "number" ? item.createdAt : Date.now()
+    };
+  }
+
   // ---------- 화면 ----------
 
   // 현재 필터에 걸린 항목만 돌려준다. 진행률도 이 결과를 기준으로 센다.
+  // 항상 새 배열을 돌려준다. 원본을 그대로 넘기면 호출한 쪽에서
+  // 정렬 같은 걸 했을 때 todos가 조용히 바뀌어 버린다.
   function getVisibleTodos() {
     if (currentFilter === "all") {
-      return todos;
+      return todos.slice();
     }
     return todos.filter(function (todo) {
       return todo.category === currentFilter;
@@ -378,21 +410,25 @@
     li.dataset.id = todo.id;
     li.classList.add("editing");
 
+    // 저장된 값이 아니라 편집 중인 값(draft)을 그린다.
+    // 그래서 재렌더가 일어나도 입력하던 내용이 남는다.
+    var draft = editingDraft || { text: todo.text, category: todo.category };
+
     var input = document.createElement("input");
     input.type = "text";
     input.className = "edit-input";
-    input.value = todo.text;
+    input.value = draft.text;
     input.maxLength = 200;
     input.setAttribute("aria-label", "할 일 수정");
 
     var select = document.createElement("select");
     select.className = "edit-category";
     select.setAttribute("aria-label", "카테고리 수정");
-    Object.keys(CATEGORY_LABELS).forEach(function (key) {
+    VALID_CATEGORIES.forEach(function (key) {
       var option = document.createElement("option");
       option.value = key;
       option.textContent = CATEGORY_LABELS[key];
-      if (key === todo.category) {
+      if (key === draft.category) {
         option.selected = true;
       }
       select.appendChild(option);
@@ -605,42 +641,42 @@
 
   // 편집 상태는 UI 상태이므로 저장하지 않는다. saveTodos()를 부르지 않는 이유다.
   function startEdit(id) {
-    if (!findTodo(id)) {
+    var todo = findTodo(id);
+    if (!todo) {
       return;
     }
     editingId = id;
+    editingDraft = { text: todo.text, category: todo.category };
     render();
   }
 
   function cancelEdit() {
     editingId = null;
+    editingDraft = null;
     render();
   }
 
   function saveEdit(id) {
     var todo = findTodo(id);
-    if (!todo) {
+    if (!todo || !editingDraft) {
       return;
     }
 
-    var li = document.querySelector("#todo-list li.editing");
-    if (!li) {
-      return;
-    }
-
-    var input = li.querySelector(".edit-input");
-    var select = li.querySelector(".edit-category");
-    var text = input.value.trim();
+    var text = editingDraft.text.trim();
 
     if (text === "" || text.length > 200) {
-      flagInvalid(input);
-      input.focus();
+      var input = document.querySelector("#todo-list li.editing .edit-input");
+      if (input) {
+        flagInvalid(input);
+        input.focus();
+      }
       return; // 저장하지 않고 편집 모드를 유지한다
     }
 
     todo.text = text;
-    todo.category = select.value;
+    todo.category = editingDraft.category;
     editingId = null;
+    editingDraft = null;
     saveTodos();
     render();
   }
@@ -648,6 +684,17 @@
   // 필터는 저장하지 않는다. 새로고침하면 항상 전체로 돌아온다.
   function setFilter(filter) {
     currentFilter = filter;
+
+    // 편집 중인 줄이 새 필터에서 보이지 않게 되면 편집을 끝낸다.
+    // 보이지도 않는 줄이 편집 상태로 남아 있으면 저장도 취소도 할 수 없다.
+    if (editingId !== null) {
+      var editing = findTodo(editingId);
+      if (!editing || (filter !== "all" && editing.category !== filter)) {
+        editingId = null;
+        editingDraft = null;
+      }
+    }
+
     updateFilterButtons();
     render();
   }
@@ -711,6 +758,21 @@
       saveEdit(li.dataset.id);
     } else if (event.key === "Escape") {
       cancelEdit();
+    }
+  });
+
+  // 편집 중 입력은 draft에만 반영한다.
+  // 여기서 render()를 부르면 글자를 칠 때마다 입력창이 교체되어 입력이 불가능해진다.
+  document.getElementById("todo-list").addEventListener("input", function (event) {
+    if (editingDraft && event.target.classList.contains("edit-input")) {
+      editingDraft.text = event.target.value;
+      event.target.classList.remove("invalid");
+    }
+  });
+
+  document.getElementById("todo-list").addEventListener("change", function (event) {
+    if (editingDraft && event.target.classList.contains("edit-category")) {
+      editingDraft.category = event.target.value;
     }
   });
 
