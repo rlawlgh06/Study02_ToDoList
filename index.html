@@ -410,6 +410,97 @@
     renderProgress();
   }
 
+  // ---------- 동작 ----------
+
+  function findTodo(id) {
+    for (var i = 0; i < todos.length; i++) {
+      if (todos[i].id === id) {
+        return todos[i];
+      }
+    }
+    return null;
+  }
+
+  // 거부를 조용히 넘기지 않고 눈에 보이게 알린다.
+  function flagInvalid(input) {
+    input.classList.remove("invalid");
+    void input.offsetWidth; // 애니메이션을 다시 돌리기 위한 강제 리플로우
+    input.classList.add("invalid");
+  }
+
+  function addTodo() {
+    var input = document.getElementById("todo-input");
+    var select = document.getElementById("category-select");
+    var text = input.value.trim();
+
+    if (text === "" || text.length > 200) {
+      flagInvalid(input);
+      input.focus();
+      return;
+    }
+
+    // 최근에 적은 것이 위에 보이도록 배열 앞에 넣는다.
+    todos.unshift({
+      id: createId(),
+      text: text,
+      category: select.value,
+      done: false,
+      createdAt: Date.now()
+    });
+
+    saveTodos();
+    render();
+
+    input.value = "";
+    input.focus(); // 연속 입력을 위해 포커스를 유지한다
+  }
+
+  function toggleTodo(id) {
+    var todo = findTodo(id);
+    if (!todo) {
+      return; // 없는 id는 조용히 무시한다
+    }
+    todo.done = !todo.done;
+    saveTodos();
+    render();
+  }
+
+  // ---------- 이벤트 ----------
+
+  var todoInput = document.getElementById("todo-input");
+
+  document.getElementById("add-button").addEventListener("click", addTodo);
+
+  todoInput.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      addTodo();
+    }
+  });
+
+  todoInput.addEventListener("input", function () {
+    this.classList.remove("invalid");
+  });
+
+  // 목록 컨테이너 한 곳에만 리스너를 건다.
+  // 재렌더로 <li>가 통째로 교체돼도 리스너를 다시 걸 필요가 없다.
+  document.getElementById("todo-list").addEventListener("click", function (event) {
+    var action = event.target.dataset.action;
+    if (!action) {
+      return;
+    }
+
+    var li = event.target.closest("li");
+    if (!li) {
+      return;
+    }
+
+    var id = li.dataset.id;
+
+    if (action === "toggle") {
+      toggleTodo(id);
+    }
+  });
+
   // ---------- 시작 ----------
   loadTodos();
   render();
