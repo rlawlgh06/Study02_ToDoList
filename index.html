@@ -445,19 +445,59 @@
     });
   }
 
-  // 전체 재렌더 방식에서는 render()마다 편집 중인 입력창이 DOM에서 교체된다.
-  // 상태(editingId)를 보고 포커스를 되돌려 주지 않으면 편집하자마자 포커스가 날아간다.
-  function restoreEditFocus() {
-    if (editingId === null) {
+  function findRow(id) {
+    var rows = document.querySelectorAll("#todo-list li");
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].dataset.id === id) {
+        return rows[i];
+      }
+    }
+    return null;
+  }
+
+  // 전체 재렌더 방식에서는 render()마다 목록의 DOM이 통째로 교체되고,
+  // 포커스가 body로 날아간다. 편집 중인 입력창뿐 아니라 체크박스와 버튼도 마찬가지라,
+  // 키보드 사용자는 항목 하나를 체크할 때마다 맨 위부터 Tab을 다시 눌러야 한다.
+  // 그래서 어느 줄의 무엇에 포커스가 있었는지를 재렌더 전에 기억해 둔다.
+  function captureFocus() {
+    var active = document.activeElement;
+    if (!active || !active.closest) {
+      return null;
+    }
+    var row = active.closest("#todo-list li");
+    if (!row) {
+      return null;
+    }
+    return { id: row.dataset.id, action: active.dataset.action || null };
+  }
+
+  function restoreFocus(snapshot) {
+    // 편집 중이면 언제나 편집 입력창이 우선이다.
+    if (editingId !== null) {
+      var editInput = document.querySelector("#todo-list li.editing .edit-input");
+      if (editInput) {
+        editInput.focus();
+        var end = editInput.value.length;
+        editInput.setSelectionRange(end, end); // 커서를 텍스트 끝에 둔다
+        return;
+      }
+    }
+
+    if (!snapshot) {
       return;
     }
-    var input = document.querySelector("#todo-list li.editing .edit-input");
-    if (!input) {
-      return;
+
+    var row = findRow(snapshot.id);
+    if (!row) {
+      return; // 삭제되었거나 필터에서 빠진 줄
     }
-    input.focus();
-    var end = input.value.length;
-    input.setSelectionRange(end, end); // 커서를 텍스트 끝에 둔다
+
+    var target = snapshot.action
+      ? row.querySelector('[data-action="' + snapshot.action + '"]')
+      : null;
+    if (target) {
+      target.focus();
+    }
   }
 
   function renderProgress() {
@@ -477,9 +517,10 @@
   }
 
   function render() {
+    var focusSnapshot = captureFocus();
     renderList();
     renderProgress();
-    restoreEditFocus();
+    restoreFocus(focusSnapshot);
   }
 
   // ---------- 동작 ----------
