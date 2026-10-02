@@ -109,8 +109,8 @@
     outline-offset: 1px;
   }
 
-  /* 입력 거부 피드백 (3단계에서 사용) */
-  #todo-input.invalid {
+  /* 입력 거부 피드백 */
+  .invalid {
     border-color: #d93025;
     animation: shake 0.25s;
   }
@@ -209,6 +209,12 @@
     color: var(--muted);
   }
 
+  /* 편집 모드 */
+  li.editing .edit-input {
+    flex: 1;
+    min-width: 0;
+  }
+
   /* 빈 상태 */
   .empty {
     padding: 40px 20px;
@@ -224,7 +230,8 @@
   <header class="section">
     <h1>할 일 관리</h1>
     <div class="progress-row">
-      <div class="progress-track">
+      <div class="progress-track" id="progress-bar" role="progressbar"
+           aria-label="할 일 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
         <div class="progress-fill" id="progress-fill"></div>
       </div>
       <span class="progress-text" id="progress-text">0 / 0 (0%)</span>
@@ -233,8 +240,9 @@
 
   <div class="section">
     <div class="input-row">
-      <input type="text" id="todo-input" placeholder="할 일을 입력하세요" maxlength="200">
-      <select id="category-select">
+      <input type="text" id="todo-input" placeholder="할 일을 입력하세요"
+             maxlength="200" aria-label="할 일 입력">
+      <select id="category-select" aria-label="카테고리 선택">
         <option value="work">업무</option>
         <option value="personal">개인</option>
         <option value="study">공부</option>
@@ -244,11 +252,11 @@
   </div>
 
   <div class="section">
-    <div class="filters" id="filters">
-      <button data-filter="all" aria-selected="true">전체</button>
-      <button data-filter="work" aria-selected="false">업무</button>
-      <button data-filter="personal" aria-selected="false">개인</button>
-      <button data-filter="study" aria-selected="false">공부</button>
+    <div class="filters" id="filters" role="tablist" aria-label="카테고리 필터">
+      <button role="tab" data-filter="all" aria-selected="true">전체</button>
+      <button role="tab" data-filter="work" aria-selected="false">업무</button>
+      <button role="tab" data-filter="personal" aria-selected="false">개인</button>
+      <button role="tab" data-filter="study" aria-selected="false">공부</button>
     </div>
   </div>
 
@@ -364,6 +372,51 @@
     return li;
   }
 
+  // 편집 중인 한 줄. 텍스트와 카테고리를 함께 바꿀 수 있다.
+  function createEditElement(todo) {
+    var li = document.createElement("li");
+    li.dataset.id = todo.id;
+    li.classList.add("editing");
+
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "edit-input";
+    input.value = todo.text;
+    input.maxLength = 200;
+    input.setAttribute("aria-label", "할 일 수정");
+
+    var select = document.createElement("select");
+    select.className = "edit-category";
+    select.setAttribute("aria-label", "카테고리 수정");
+    Object.keys(CATEGORY_LABELS).forEach(function (key) {
+      var option = document.createElement("option");
+      option.value = key;
+      option.textContent = CATEGORY_LABELS[key];
+      if (key === todo.category) {
+        option.selected = true;
+      }
+      select.appendChild(option);
+    });
+
+    var saveButton = document.createElement("button");
+    saveButton.dataset.action = "save";
+    saveButton.textContent = "저장";
+
+    var cancelButton = document.createElement("button");
+    cancelButton.dataset.action = "cancel";
+    cancelButton.textContent = "취소";
+
+    var actions = document.createElement("span");
+    actions.className = "row-actions";
+    actions.appendChild(saveButton);
+    actions.appendChild(cancelButton);
+
+    li.appendChild(input);
+    li.appendChild(select);
+    li.appendChild(actions);
+    return li;
+  }
+
   // 빈 상태는 두 가지를 구분한다. 할 일이 아예 없는 것과, 이 필터에만 없는 것.
   function createEmptyElement() {
     var li = document.createElement("li");
@@ -386,8 +439,25 @@
     }
 
     visible.forEach(function (todo) {
-      list.appendChild(createTodoElement(todo));
+      list.appendChild(
+        todo.id === editingId ? createEditElement(todo) : createTodoElement(todo)
+      );
     });
+  }
+
+  // 전체 재렌더 방식에서는 render()마다 편집 중인 입력창이 DOM에서 교체된다.
+  // 상태(editingId)를 보고 포커스를 되돌려 주지 않으면 편집하자마자 포커스가 날아간다.
+  function restoreEditFocus() {
+    if (editingId === null) {
+      return;
+    }
+    var input = document.querySelector("#todo-list li.editing .edit-input");
+    if (!input) {
+      return;
+    }
+    input.focus();
+    var end = input.value.length;
+    input.setSelectionRange(end, end); // 커서를 텍스트 끝에 둔다
   }
 
   function renderProgress() {
@@ -401,6 +471,7 @@
     var percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
     document.getElementById("progress-fill").style.width = percent + "%";
+    document.getElementById("progress-bar").setAttribute("aria-valuenow", String(percent));
     document.getElementById("progress-text").textContent =
       done + " / " + total + " (" + percent + "%)";
   }
@@ -408,6 +479,7 @@
   function render() {
     renderList();
     renderProgress();
+    restoreEditFocus();
   }
 
   // ---------- 동작 ----------
@@ -490,6 +562,48 @@
     });
   }
 
+  // 편집 상태는 UI 상태이므로 저장하지 않는다. saveTodos()를 부르지 않는 이유다.
+  function startEdit(id) {
+    if (!findTodo(id)) {
+      return;
+    }
+    editingId = id;
+    render();
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    render();
+  }
+
+  function saveEdit(id) {
+    var todo = findTodo(id);
+    if (!todo) {
+      return;
+    }
+
+    var li = document.querySelector("#todo-list li.editing");
+    if (!li) {
+      return;
+    }
+
+    var input = li.querySelector(".edit-input");
+    var select = li.querySelector(".edit-category");
+    var text = input.value.trim();
+
+    if (text === "" || text.length > 200) {
+      flagInvalid(input);
+      input.focus();
+      return; // 저장하지 않고 편집 모드를 유지한다
+    }
+
+    todo.text = text;
+    todo.category = select.value;
+    editingId = null;
+    saveTodos();
+    render();
+  }
+
   // 필터는 저장하지 않는다. 새로고침하면 항상 전체로 돌아온다.
   function setFilter(filter) {
     currentFilter = filter;
@@ -532,6 +646,30 @@
       toggleTodo(id);
     } else if (action === "remove") {
       deleteTodo(id);
+    } else if (action === "edit") {
+      startEdit(id);
+    } else if (action === "save") {
+      saveEdit(id);
+    } else if (action === "cancel") {
+      cancelEdit();
+    }
+  });
+
+  // 편집 입력창의 Enter/Esc도 같은 컨테이너에서 위임으로 받는다.
+  document.getElementById("todo-list").addEventListener("keydown", function (event) {
+    if (!event.target.classList.contains("edit-input")) {
+      return;
+    }
+
+    var li = event.target.closest("li");
+    if (!li) {
+      return;
+    }
+
+    if (event.key === "Enter") {
+      saveEdit(li.dataset.id);
+    } else if (event.key === "Escape") {
+      cancelEdit();
     }
   });
 
