@@ -10,3 +10,9 @@ desktop.ini
 
 # 로그
 *.log
+
+# 작업 기록 (superpowers)
+.superpowers/
+
+# 검증용 로컬 서버 설정 (앱 자체는 서버가 필요 없다)
+.claude/

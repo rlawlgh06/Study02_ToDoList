@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>할 일 관리</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --line: #e3e5e8;
+    --accent: #2f6feb;
+
+    --work-bg: #e3edff;
+    --work-fg: #1f4fbf;
+    --personal-bg: #e0f5e9;
+    --personal-fg: #1d7a4b;
+    --study-bg: #f1e7fb;
+    --study-fg: #7038ad;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 32px 16px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic",
+                 system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .app {
+    max-width: 600px;
+    margin: 0 auto;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .section {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .section:last-child { border-bottom: none; }
+
+  /* 헤더와 진행률 */
+  h1 {
+    margin: 0 0 12px;
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 8px;
+    background: var(--line);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 0.2s ease;
+  }
+
+  .progress-text {
+    font-size: 13px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* 입력줄 */
+  .input-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  input[type="text"], select {
+    font: inherit;
+    padding: 9px 11px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: inherit;
+  }
+
+  #todo-input { flex: 1; min-width: 0; }
+
+  input[type="text"]:focus-visible,
+  select:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  /* 입력 거부 피드백 (3단계에서 사용) */
+  #todo-input.invalid {
+    border-color: #d93025;
+    animation: shake 0.25s;
+  }
+  @keyframes shake {
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
+  button {
+    font: inherit;
+    padding: 9px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: inherit;
+    cursor: pointer;
+  }
+  button:hover { background: #f7f8f9; }
+
+  .primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .primary:hover { background: #255ccc; }
+
+  /* 필터 탭 */
+  .filters { display: flex; gap: 6px; }
+
+  .filters button {
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 14px;
+  }
+
+  .filters button[aria-selected="true"] {
+    background: var(--text);
+    border-color: var(--text);
+    color: #fff;
+  }
+
+  /* 목록 */
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  li:last-child { border-bottom: none; }
+
+  input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+
+  .todo-text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  li.done .todo-text {
+    text-decoration: line-through;
+    color: var(--muted);
+  }
+
+  .badge {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+  .badge.work     { background: var(--work-bg);     color: var(--work-fg); }
+  .badge.personal { background: var(--personal-bg); color: var(--personal-fg); }
+  .badge.study    { background: var(--study-bg);    color: var(--study-fg); }
+
+  .row-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .row-actions button {
+    padding: 4px 9px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  /* 빈 상태 */
+  .empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="section">
+    <h1>할 일 관리</h1>
+    <div class="progress-row">
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <span class="progress-text" id="progress-text">0 / 0 (0%)</span>
+    </div>
+  </header>
+
+  <div class="section">
+    <div class="input-row">
+      <input type="text" id="todo-input" placeholder="할 일을 입력하세요" maxlength="200">
+      <select id="category-select">
+        <option value="work">업무</option>
+        <option value="personal">개인</option>
+        <option value="study">공부</option>
+      </select>
+      <button class="primary" id="add-button">추가</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="filters" id="filters">
+      <button data-filter="all" aria-selected="true">전체</button>
+      <button data-filter="work" aria-selected="false">업무</button>
+      <button data-filter="personal" aria-selected="false">개인</button>
+      <button data-filter="study" aria-selected="false">공부</button>
+    </div>
+  </div>
+
+  <ul id="todo-list">
+    <!-- 임시 하드코딩: 레이아웃 확인용. 2단계에서 renderList()로 대체하며 삭제한다 -->
+    <li data-id="sample-1">
+      <input type="checkbox" data-action="toggle">
+      <span class="todo-text">PRD 검토 마무리</span>
+      <span class="badge work">업무</span>
+      <span class="row-actions">
+        <button data-action="edit">수정</button>
+        <button data-action="remove">삭제</button>
+      </span>
+    </li>
+    <li data-id="sample-2" class="done">
+      <input type="checkbox" data-action="toggle" checked>
+      <span class="todo-text">장보기</span>
+      <span class="badge personal">개인</span>
+      <span class="row-actions">
+        <button data-action="edit">수정</button>
+        <button data-action="remove">삭제</button>
+      </span>
+    </li>
+    <li data-id="sample-3">
+      <input type="checkbox" data-action="toggle">
+      <span class="todo-text">자바스크립트 3장 읽기</span>
+      <span class="badge study">공부</span>
+      <span class="row-actions">
+        <button data-action="edit">수정</button>
+        <button data-action="remove">삭제</button>
+      </span>
+    </li>
+    <!-- 임시 하드코딩 끝 -->
+  </ul>
+
+</div>
+
+<script>
+  // ---------- 상수 ----------
+  var STORAGE_KEY = "todoApp.v1";
+
+  var CATEGORY_LABELS = {
+    work: "업무",
+    personal: "개인",
+    study: "공부"
+  };
+
+  // ---------- 상태 ----------
+  var todos = [];
+  var currentFilter = "all";
+  var editingId = null;
+
+  // ---------- 저장 계층 ----------
+
+  // 항목마다 고유한 문자열 id를 만든다.
+  // crypto.randomUUID()는 file://에서 브라우저별로 동작이 갈려 쓰지 않는다.
+  function createId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function saveTodos() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, todos: todos }));
+    } catch (e) {
+      console.warn("저장에 실패했습니다.", e);
+    }
+  }
+
+  function loadTodos() {
+    var raw = null;
+    try {
+      raw = localStorage.getItem(STORAGE_KEY);
+    } catch (e) {
+      console.warn("localStorage에 접근할 수 없습니다. 저장 없이 시작합니다.", e);
+      todos = [];
+      return;
+    }
+
+    if (!raw) {
+      todos = [];
+      return;
+    }
+
+    try {
+      var parsed = JSON.parse(raw);
+      todos = Array.isArray(parsed.todos) ? parsed.todos : [];
+    } catch (e) {
+      console.warn("저장된 데이터를 읽을 수 없어 빈 목록으로 시작합니다.", e);
+      todos = [];
+    }
+  }
+
+  // ---------- 시작 ----------
+  loadTodos();
+</script>
+
+</body>
+</html>
