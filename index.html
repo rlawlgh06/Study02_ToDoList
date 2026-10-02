@@ -252,37 +252,7 @@
     </div>
   </div>
 
-  <ul id="todo-list">
-    <!-- 임시 하드코딩: 레이아웃 확인용. 2단계에서 renderList()로 대체하며 삭제한다 -->
-    <li data-id="sample-1">
-      <input type="checkbox" data-action="toggle">
-      <span class="todo-text">PRD 검토 마무리</span>
-      <span class="badge work">업무</span>
-      <span class="row-actions">
-        <button data-action="edit">수정</button>
-        <button data-action="remove">삭제</button>
-      </span>
-    </li>
-    <li data-id="sample-2" class="done">
-      <input type="checkbox" data-action="toggle" checked>
-      <span class="todo-text">장보기</span>
-      <span class="badge personal">개인</span>
-      <span class="row-actions">
-        <button data-action="edit">수정</button>
-        <button data-action="remove">삭제</button>
-      </span>
-    </li>
-    <li data-id="sample-3">
-      <input type="checkbox" data-action="toggle">
-      <span class="todo-text">자바스크립트 3장 읽기</span>
-      <span class="badge study">공부</span>
-      <span class="row-actions">
-        <button data-action="edit">수정</button>
-        <button data-action="remove">삭제</button>
-      </span>
-    </li>
-    <!-- 임시 하드코딩 끝 -->
-  </ul>
+  <ul id="todo-list"></ul>
 
 </div>
 
@@ -341,8 +311,108 @@
     }
   }
 
+  // ---------- 화면 ----------
+
+  // 현재 필터에 걸린 항목만 돌려준다. 진행률도 이 결과를 기준으로 센다.
+  function getVisibleTodos() {
+    if (currentFilter === "all") {
+      return todos;
+    }
+    return todos.filter(function (todo) {
+      return todo.category === currentFilter;
+    });
+  }
+
+  function createTodoElement(todo) {
+    var li = document.createElement("li");
+    li.dataset.id = todo.id;
+    if (todo.done) {
+      li.classList.add("done");
+    }
+
+    var checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = todo.done;
+    checkbox.dataset.action = "toggle";
+
+    // 사용자 입력은 textContent로만 넣는다. innerHTML을 쓰면 스크립트가 실행된다.
+    var text = document.createElement("span");
+    text.className = "todo-text";
+    text.textContent = todo.text;
+
+    var badge = document.createElement("span");
+    badge.className = "badge " + todo.category;
+    badge.textContent = CATEGORY_LABELS[todo.category] || todo.category;
+
+    var editButton = document.createElement("button");
+    editButton.dataset.action = "edit";
+    editButton.textContent = "수정";
+
+    var removeButton = document.createElement("button");
+    removeButton.dataset.action = "remove";
+    removeButton.textContent = "삭제";
+
+    var actions = document.createElement("span");
+    actions.className = "row-actions";
+    actions.appendChild(editButton);
+    actions.appendChild(removeButton);
+
+    li.appendChild(checkbox);
+    li.appendChild(text);
+    li.appendChild(badge);
+    li.appendChild(actions);
+    return li;
+  }
+
+  // 빈 상태는 두 가지를 구분한다. 할 일이 아예 없는 것과, 이 필터에만 없는 것.
+  function createEmptyElement() {
+    var li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = todos.length === 0
+      ? "할 일을 추가해 보세요"
+      : "이 카테고리에는 할 일이 없습니다";
+    return li;
+  }
+
+  function renderList() {
+    var list = document.getElementById("todo-list");
+    var visible = getVisibleTodos();
+
+    list.textContent = "";
+
+    if (visible.length === 0) {
+      list.appendChild(createEmptyElement());
+      return;
+    }
+
+    visible.forEach(function (todo) {
+      list.appendChild(createTodoElement(todo));
+    });
+  }
+
+  function renderProgress() {
+    var visible = getVisibleTodos();
+    var total = visible.length;
+    var done = visible.filter(function (todo) {
+      return todo.done;
+    }).length;
+
+    // 항목이 없을 때 0으로 나누지 않는다.
+    var percent = total === 0 ? 0 : Math.round((done / total) * 100);
+
+    document.getElementById("progress-fill").style.width = percent + "%";
+    document.getElementById("progress-text").textContent =
+      done + " / " + total + " (" + percent + "%)";
+  }
+
+  function render() {
+    renderList();
+    renderProgress();
+  }
+
   // ---------- 시작 ----------
   loadTodos();
+  render();
 </script>
 
 </body>
