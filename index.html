@@ -465,6 +465,38 @@
     render();
   }
 
+  function deleteTodo(id) {
+    var todo = findTodo(id);
+    if (!todo) {
+      return;
+    }
+
+    var label = todo.text.length > 30 ? todo.text.slice(0, 30) + "…" : todo.text;
+    if (!window.confirm("'" + label + "'을(를) 삭제할까요?")) {
+      return;
+    }
+
+    todos = todos.filter(function (item) {
+      return item.id !== id;
+    });
+    saveTodos();
+    render();
+  }
+
+  function updateFilterButtons() {
+    var buttons = document.querySelectorAll("#filters button");
+    Array.prototype.forEach.call(buttons, function (button) {
+      button.setAttribute("aria-selected", String(button.dataset.filter === currentFilter));
+    });
+  }
+
+  // 필터는 저장하지 않는다. 새로고침하면 항상 전체로 돌아온다.
+  function setFilter(filter) {
+    currentFilter = filter;
+    updateFilterButtons();
+    render();
+  }
+
   // ---------- 이벤트 ----------
 
   var todoInput = document.getElementById("todo-input");
@@ -498,7 +530,18 @@
 
     if (action === "toggle") {
       toggleTodo(id);
+    } else if (action === "remove") {
+      deleteTodo(id);
     }
+  });
+
+  // 필터 탭에도 같은 방식으로 리스너를 하나만 건다.
+  document.getElementById("filters").addEventListener("click", function (event) {
+    var filter = event.target.dataset.filter;
+    if (!filter) {
+      return;
+    }
+    setFilter(filter);
   });
 
   // ---------- 시작 ----------
